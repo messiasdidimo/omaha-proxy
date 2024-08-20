@@ -50,7 +50,10 @@ class MarketcapData(db.Model):
 class HealthData(db.Model):
   id = db.Column(db.Integer, primary_key=True)
   symbol = db.Column(db.String(10), db.ForeignKey('symbol.symbol'), nullable=False)
-  health_value = db.Column(db.Integer, nullable=False)
+  health = db.Column(db.Integer, nullable=False)
+  score = db.Column(db.Integer, nullable=False)
+  current_liabilities = db.Column(db.Integer, nullable=False)
+  current_assets = db.Column(db.Integer, nullable=False)
 
 
 class GNumberData(db.Model):
@@ -63,12 +66,35 @@ class GNumberData(db.Model):
 
 @app.route('/health_data', methods=['POST'])
 def post_health_data():
-    data = request.json
-    for item in data:
-        new_health = HealthData(symbol=item['symbol'], health_value=item['health_value'])
-        db.session.add(new_health)
-    db.session.commit()
-    return jsonify({"message": "Health data added successfully!"}), 201
+    try:
+        # Get the raw data and decode it
+        raw_data = request.get_data(as_text=True)
+
+        # Parse the raw data as JSON
+        data = json.loads(raw_data)
+
+        # Ensure that data is a list
+        if isinstance(data, str):
+            data = json.loads(data)  # If data is still a string, parse it again
+
+        for ticker_data in data:
+            if isinstance(ticker_data, dict):
+                ticker = HealthData(
+                    symbol=ticker_data['ticker'],
+                    current_assets=ticker_data['current_assets'],
+                    current_liabilities=ticker_data['current_liabilities'],
+                    health=ticker_data['health'],
+                    score=ticker_data['score']
+                )
+                db.session.add(ticker)
+            else:
+                print(f"Unexpected structure in ticker_data: {ticker_data}")
+
+        db.session.commit()
+        return jsonify({"message": "Health data added successfully!"}), 201
+
+    except json.JSONDecodeError as e:
+        return jsonify({"error": "Invalid JSON data"}), 400
 
 
 @app.route('/dividends_data', methods=['POST'])
@@ -247,7 +273,15 @@ def get_marketcap_data():
 @app.route('/get_health_data', methods=['GET'])
 def get_health_data():
     health_data = HealthData.query.all()
-    return jsonify([{'symbol': health.symbol, 'health_value': health.health_value} for health in health_data])
+    return jsonify([
+        {'symbol': health.symbol,
+         'health': health.health,
+         'score': health.score,
+         'current_assets': health.current_assets,
+         'current_liabilities': health.current_liabilities
+        }
+      for health in health_data
+    ])
 
 
 @app.route('/get_gnumber_data', methods=['GET'])
@@ -353,7 +387,7 @@ def test():
             for dividend in dividends_data
         ],
         'health_data': [
-            {'id': health.id, 'symbol': health.symbol, 'health_value': health.health_value}
+            {'id': health.id, 'symbol': health.symbol, 'health': health.health, 'score': health.score, 'current_assets': health.current_assets, 'current_liabilities': health.current_liabilities}
             for health in health_data
         ],
         'gnumber_data': [
