@@ -35,8 +35,9 @@ class GrowthData(db.Model):
 class DividendsData(db.Model):
   id = db.Column(db.Integer, primary_key=True)
   symbol = db.Column(db.String(10), db.ForeignKey('symbol.symbol'), nullable=False)
-  dividend_value = db.Column(db.Integer, nullable=False)
-
+  average_yearly_dividend = db.Column(db.Float, nullable=False)
+  score = db.Column(db.Integer, nullable=False)
+  
 
 class HealthData(db.Model):
   id = db.Column(db.Integer, primary_key=True)
@@ -68,16 +69,6 @@ def post_growth_data():
     return jsonify({"message": "Growth data added successfully!"}), 201
 
 
-@app.route('/dividends_data', methods=['POST'])
-def post_dividends_data():
-    data = request.json
-    for item in data:
-        new_dividends = DividendsData(symbol=item['symbol'], dividend_value=item['dividend_value'])
-        db.session.add(new_dividends)
-    db.session.commit()
-    return jsonify({"message": "Dividends data added successfully!"}), 201
-
-
 @app.route('/health_data', methods=['POST'])
 def post_health_data():
     data = request.json
@@ -87,12 +78,43 @@ def post_health_data():
     db.session.commit()
     return jsonify({"message": "Health data added successfully!"}), 201
 
+
+@app.route('/dividends_data', methods=['POST'])
+def post_dividends_data():
+    try:
+      # Get the raw data and decode it
+      raw_data = request.get_data(as_text=True)
+
+      # Parse the raw data as JSON
+      data = json.loads(raw_data)
+
+      # Ensure that data is a list
+      if isinstance(data, str):
+          data = json.loads(data)  # If data is still a string, parse it again
+
+      for ticker_data in data:
+          if isinstance(ticker_data, dict):
+              ticker = DividendsData(
+                  symbol=ticker_data['ticker'],
+                  average_yearly_dividend=ticker_data['average_yearly_dividend'],
+                  score=ticker_data['score']
+              )
+              db.session.add(ticker)
+          else:
+              print(f"Unexpected structure in ticker_data: {ticker_data}")
+
+      db.session.commit()
+      return jsonify({"message": "G-Number data added successfully!"}), 201
+
+    except json.JSONDecodeError as e:
+      return jsonify({"error": "Invalid JSON data"}), 400
+  
+
 @app.route('/gnumber_data', methods=['POST'])
 def post_gnumber_data():
     try:
         # Get the raw data and decode it
         raw_data = request.get_data(as_text=True)
-        print("Raw data received:", raw_data)  # Debugging step
 
         # Parse the raw data as JSON
         data = json.loads(raw_data)
@@ -148,7 +170,14 @@ def get_growth_data():
 @app.route('/get_dividends_data', methods=['GET'])
 def get_dividends_data():
     dividends_data = DividendsData.query.all()
-    return jsonify([{'symbol': dividend.symbol, 'dividend_value': dividend.dividend_value} for dividend in dividends_data])
+    return jsonify([
+        {
+            'symbol': dividend.symbol,
+            'average_yearly_dividend': dividend.average_yearly_dividend,
+            'score': dividend.score
+        }
+        for dividend in dividends_data
+    ])
 
 
 @app.route('/get_health_data', methods=['GET'])
@@ -262,7 +291,7 @@ def test():
             for growth in growth_data
         ],
         'dividends_data': [
-            {'id': dividend.id, 'symbol': dividend.symbol, 'dividend_value': dividend.dividend_value}
+            {'id': dividend.id, 'symbol': dividend.symbol, 'yearly_average_dividend': dividend.average_yearly_dividend, 'score': dividend.score}
             for dividend in dividends_data
         ],
         'health_data': [
@@ -287,6 +316,6 @@ def test():
 
 if __name__ == '__main__':
     with app.app_context():
-      db.drop_all()  
+      # db.drop_all()  
       db.create_all()
     app.run(host='0.0.0.0', port=8080, debug=True)
