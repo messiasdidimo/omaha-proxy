@@ -38,6 +38,13 @@ class DividendsData(db.Model):
   symbol = db.Column(db.String(10), db.ForeignKey('symbol.symbol'), nullable=False)
   average_yearly_dividend = db.Column(db.Float, nullable=False)
   score = db.Column(db.Integer, nullable=False)
+
+
+class MarketcapData(db.Model):
+  id = db.Column(db.Integer, primary_key=True)
+  symbol = db.Column(db.String(10), db.ForeignKey('symbol.symbol'), nullable=False)
+  marketcap = db.Column(db.Integer, nullable=False)
+  score = db.Column(db.Integer, nullable=False)
   
 
 class HealthData(db.Model):
@@ -52,12 +59,6 @@ class GNumberData(db.Model):
   gnumber_value = db.Column(db.Float, nullable=False)  # Use Float for decimal values
   current_price = db.Column(db.Float, nullable=False)
   score = db.Column(db.Integer, nullable=False)
-
-
-class MarketcapData(db.Model):
-  id = db.Column(db.Integer, primary_key=True)
-  symbol = db.Column(db.String(10), db.ForeignKey('symbol.symbol'), nullable=False)
-  marketcap_value = db.Column(db.Integer, nullable=False)
 
 
 @app.route('/health_data', methods=['POST'])
@@ -175,12 +176,33 @@ def common_symbols():
 
 @app.route('/marketcap_data', methods=['POST'])
 def post_marketcap_data():
-    data = request.json
-    for item in data:
-        new_marketcap = MarketcapData(symbol=item['symbol'], marketcap_value=item['marketcap_value'])
-        db.session.add(new_marketcap)
-    db.session.commit()
-    return jsonify({"message": "Marketcap data added successfully!"}), 201
+    try:
+      # Get the raw data and decode it
+      raw_data = request.get_data(as_text=True)
+
+      # Parse the raw data as JSON
+      data = json.loads(raw_data)
+
+      # Ensure that data is a list
+      if isinstance(data, str):
+          data = json.loads(data)  # If data is still a string, parse it again
+
+      for ticker_data in data:
+          if isinstance(ticker_data, dict):
+              ticker = MarketcapData(
+                  symbol=ticker_data['ticker'],
+                  marketcap=ticker_data['marketcap'],
+                  score=ticker_data['score']
+              )
+              db.session.add(ticker)
+          else:
+              print(f"Unexpected structure in ticker_data: {ticker_data}")
+
+      db.session.commit()
+      return jsonify({"message": "Growth data added successfully!"}), 201
+
+    except json.JSONDecodeError as e:
+      return jsonify({"error": "Invalid JSON data"}), 400
 
 
 @app.route('/get_growth_data', methods=['GET'])
@@ -209,6 +231,19 @@ def get_dividends_data():
     ])
 
 
+@app.route('/get_marketcap_data', methods=['GET'])
+def get_marketcap_data():
+    marketcap_data = MarketcapData.query.all()
+    return jsonify([
+        {
+            'symbol': marketcap.symbol,
+            'marketcap': marketcap.marketcap,
+            'score': marketcap.score
+        }
+        for marketcap in marketcap_data
+    ])
+
+
 @app.route('/get_health_data', methods=['GET'])
 def get_health_data():
     health_data = HealthData.query.all()
@@ -227,12 +262,6 @@ def get_gnumber_data():
         } 
         for gnumber in gnumber_data
     ])
-
-
-@app.route('/get_marketcap_data', methods=['GET'])
-def get_marketcap_data():
-    marketcap_data = MarketcapData.query.all()
-    return jsonify([{'symbol': marketcap.symbol, 'marketcap_value': marketcap.marketcap_value} for marketcap in marketcap_data])
 
 
 @app.route('/user', methods=['POST'])
@@ -332,7 +361,7 @@ def test():
             for gnumber in gnumber_data
         ],
         'marketcap_data': [
-            {'id': marketcap.id, 'symbol': marketcap.symbol, 'marketcap_value': marketcap.marketcap_value}
+            {'id': marketcap.id, 'symbol': marketcap.symbol, 'marketcap': marketcap.marketcap, 'score': marketcap.score}
             for marketcap in marketcap_data
         ],
         'users': [
@@ -345,6 +374,6 @@ def test():
 
 if __name__ == '__main__':
     with app.app_context():
-      db.drop_all()  
+      # db.drop_all()  
       db.create_all()
     app.run(host='0.0.0.0', port=8080, debug=True)
