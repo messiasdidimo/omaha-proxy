@@ -90,17 +90,39 @@ def post_health_data():
 
 @app.route('/gnumber_data', methods=['POST'])
 def post_gnumber_data():
-    data = json.loads(request.data.decode('utf-8'))
-    for ticker, gnumber_data in data.items():
-        ticker = GNumberData(
-            symbol=gnumber_data['ticker'],
-            gnumber_value=gnumber_data['GNumber'],
-            current_price=gnumber_data['Current Price'],
-            score=gnumber_data['score']
-        )
-        db.session.add(ticker)
-    db.session.commit()
-    return jsonify({"message": "G-Number data added successfully!"}), 201
+    try:
+        # Get the raw data and decode it
+        raw_data = request.get_data(as_text=True)
+        print("Raw data received:", raw_data)  # Debugging step
+
+        # Parse the raw data as JSON
+        data = json.loads(raw_data)
+
+        # Ensure that data is a list
+        if isinstance(data, str):
+            data = json.loads(data)  # If data is still a string, parse it again
+
+        for company_dict in data:
+            if isinstance(company_dict, dict):
+                for symbol, ticker_data in company_dict.items():
+                    if isinstance(ticker_data, dict):
+                        ticker = GNumberData(
+                            symbol=ticker_data['ticker'],
+                            gnumber_value=ticker_data['GNumber'],
+                            current_price=ticker_data['Current Price'],
+                            score=ticker_data['score']
+                        )
+                        db.session.add(ticker)
+                    else:
+                        print(f"Unexpected structure in ticker_data: {ticker_data}")
+            else:
+                print(f"Unexpected structure in company_dict: {company_dict}")
+
+        db.session.commit()
+        return jsonify({"message": "G-Number data added successfully!"}), 201
+
+    except json.JSONDecodeError as e:
+        return jsonify({"error": "Invalid JSON data"}), 400
 
 
 @app.route('/common_symbols', methods=['POST'])
@@ -216,8 +238,6 @@ def manage_subscribers():
 
 @app.route('/test')
 def test():
-    # GNumberData.query.delete()
-    # db.session.commit()
     # Get all data from all models
     symbols = Symbol.query.all()
     growth_data = GrowthData.query.all()
@@ -247,7 +267,7 @@ def test():
             for health in health_data
         ],
         'gnumber_data': [
-            {'id': gnumber.id, 'symbol': gnumber.symbol, 'gnumber_value': gnumber.gnumber_value}
+            {'id': gnumber.id, 'symbol': gnumber.symbol, 'gnumber_value': gnumber.gnumber_value, 'current_price': gnumber.current_price, 'score': gnumber.score}
             for gnumber in gnumber_data
         ],
         'marketcap_data': [
@@ -260,10 +280,10 @@ def test():
         ]
     }
     return render_template('test.html', database_content=database_content)
-    # print(json.dumps(database_content, indent=4))
 
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+      # db.drop_all()  
+      db.create_all()
     app.run(host='0.0.0.0', port=8080, debug=True)
