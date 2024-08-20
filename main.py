@@ -87,7 +87,6 @@ def post_health_data():
     db.session.commit()
     return jsonify({"message": "Health data added successfully!"}), 201
 
-
 @app.route('/gnumber_data', methods=['POST'])
 def post_gnumber_data():
     try:
@@ -102,21 +101,17 @@ def post_gnumber_data():
         if isinstance(data, str):
             data = json.loads(data)  # If data is still a string, parse it again
 
-        for company_dict in data:
-            if isinstance(company_dict, dict):
-                for symbol, ticker_data in company_dict.items():
-                    if isinstance(ticker_data, dict):
-                        ticker = GNumberData(
-                            symbol=ticker_data['ticker'],
-                            gnumber_value=ticker_data['GNumber'],
-                            current_price=ticker_data['Current Price'],
-                            score=ticker_data['score']
-                        )
-                        db.session.add(ticker)
-                    else:
-                        print(f"Unexpected structure in ticker_data: {ticker_data}")
+        for ticker_data in data:
+            if isinstance(ticker_data, dict):
+                ticker = GNumberData(
+                    symbol=ticker_data['ticker'],
+                    gnumber_value=ticker_data['GNumber'],
+                    current_price=ticker_data['Current Price'],
+                    score=ticker_data['score']
+                )
+                db.session.add(ticker)
             else:
-                print(f"Unexpected structure in company_dict: {company_dict}")
+                print(f"Unexpected structure in ticker_data: {ticker_data}")
 
         db.session.commit()
         return jsonify({"message": "G-Number data added successfully!"}), 201
@@ -165,7 +160,15 @@ def get_health_data():
 @app.route('/get_gnumber_data', methods=['GET'])
 def get_gnumber_data():
     gnumber_data = GNumberData.query.all()
-    return jsonify([{'symbol': gnumber.symbol, 'gnumber_value': gnumber.gnumber_value} for gnumber in gnumber_data])
+    return jsonify([
+        {
+            'symbol': gnumber.symbol,
+            'gnumber_value': gnumber.gnumber_value,
+            'current_price': gnumber.current_price,
+            'score': gnumber.score
+        } 
+        for gnumber in gnumber_data
+    ])
 
 
 @app.route('/get_marketcap_data', methods=['GET'])
@@ -284,6 +287,6 @@ def test():
 
 if __name__ == '__main__':
     with app.app_context():
-      # db.drop_all()  
+      db.drop_all()  
       db.create_all()
     app.run(host='0.0.0.0', port=8080, debug=True)
