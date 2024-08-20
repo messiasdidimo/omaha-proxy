@@ -29,7 +29,8 @@ class Symbol(db.Model):
 class GrowthData(db.Model):
   id = db.Column(db.Integer, primary_key=True)
   symbol = db.Column(db.String(10), db.ForeignKey('symbol.symbol'), nullable=False)
-  growth_value = db.Column(db.Integer, nullable=False)
+  growth = db.Column(db.Integer, nullable=False)
+  score = db.Column(db.Integer, nullable=False)
 
 
 class DividendsData(db.Model):
@@ -57,16 +58,6 @@ class MarketcapData(db.Model):
   id = db.Column(db.Integer, primary_key=True)
   symbol = db.Column(db.String(10), db.ForeignKey('symbol.symbol'), nullable=False)
   marketcap_value = db.Column(db.Integer, nullable=False)
-
-
-@app.route('/growth_data', methods=['POST'])
-def post_growth_data():
-    data = request.json
-    for item in data:
-        new_growth = GrowthData(symbol=item['symbol'], growth_value=item['growth_value'])
-        db.session.add(new_growth)
-    db.session.commit()
-    return jsonify({"message": "Growth data added successfully!"}), 201
 
 
 @app.route('/health_data', methods=['POST'])
@@ -108,6 +99,37 @@ def post_dividends_data():
 
     except json.JSONDecodeError as e:
       return jsonify({"error": "Invalid JSON data"}), 400
+
+
+@app.route('/growth_data', methods=['POST'])
+def post_growth_data():
+    try:
+        # Get the raw data and decode it
+        raw_data = request.get_data(as_text=True)
+
+        # Parse the raw data as JSON
+        data = json.loads(raw_data)
+
+        # Ensure that data is a list
+        if isinstance(data, str):
+            data = json.loads(data)  # If data is still a string, parse it again
+
+        for ticker_data in data:
+            if isinstance(ticker_data, dict):
+                ticker = GrowthData(
+                    symbol=ticker_data['ticker'],
+                    growth=ticker_data['growth'],
+                    score=ticker_data['score']
+                )
+                db.session.add(ticker)
+            else:
+                print(f"Unexpected structure in ticker_data: {ticker_data}")
+
+        db.session.commit()
+        return jsonify({"message": "Growth data added successfully!"}), 201
+
+    except json.JSONDecodeError as e:
+        return jsonify({"error": "Invalid JSON data"}), 400
   
 
 @app.route('/gnumber_data', methods=['POST'])
@@ -164,7 +186,14 @@ def post_marketcap_data():
 @app.route('/get_growth_data', methods=['GET'])
 def get_growth_data():
     growth_data = GrowthData.query.all()
-    return jsonify([{'symbol': growth.symbol, 'growth_value': growth.growth_value} for growth in growth_data])
+    return jsonify([
+        {
+            'symbol': growth.symbol,
+            'score': growth.score,
+            'growth': growth.growth
+        }
+        for growth in growth_data
+    ])
 
 
 @app.route('/get_dividends_data', methods=['GET'])
@@ -287,7 +316,7 @@ def test():
             for symbol in symbols
         ],
         'growth_data': [
-            {'id': growth.id, 'symbol': growth.symbol, 'growth_value': growth.growth_value}
+            {'id': growth.id, 'symbol': growth.symbol, 'growth': growth.growth}
             for growth in growth_data
         ],
         'dividends_data': [
@@ -316,6 +345,6 @@ def test():
 
 if __name__ == '__main__':
     with app.app_context():
-      # db.drop_all()  
+      db.drop_all()  
       db.create_all()
     app.run(host='0.0.0.0', port=8080, debug=True)
